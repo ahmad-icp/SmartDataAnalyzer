@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
+from pathlib import Path
 from io import BytesIO
+import uuid
 
 from data_loading import load_dataframe, to_excel_bytes
 from cleaning_tools import (
@@ -14,10 +16,11 @@ from cleaning_tools import (
 from visualization import make_chart, export_plotly_png
 from ai_insights import generate_insights
 from reporting import generate_html_report, html_to_pdf_bytes, upload_bytes_to_s3, generate_presigned_url
+from modules.background_tasks import run_in_background, get_task_status
+from modules.autosave import save_html_result
 from feature_engineering import generate_basic_features
 from tableau_publisher import publish_dataframe_to_tableau
 from powerbi_publisher import publish_dataframe_to_powerbi
-
 
 st.set_page_config(page_title="Smart Data Analyzer - Pro", layout="wide")
 
@@ -27,7 +30,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Smart Data Analyzer — Pro")
+st.title("Smart Data Analyzer - Pro")
 
 with st.sidebar.expander("Upload & Settings", expanded=True):
     uploaded_file = st.file_uploader("Upload CSV / Excel / Parquet", type=["csv", "xlsx", "parquet"])
@@ -53,6 +56,7 @@ if uploaded_file is not None:
 
 tabs = st.tabs(["Data Overview", "Data Preview", "Cleaning", "Feature Engineering", "Dashboard", "AI Insights"])
 
+# Data Overview & Profiling
 with tabs[0]:
     st.header("Data Overview & Profiling")
     if "df" not in st.session_state or st.session_state["df"] is None:
@@ -64,7 +68,40 @@ with tabs[0]:
             profile = ProfileReport(st.session_state["df"], minimal=True)
             html = profile.to_html()
             st.download_button("Download profiling HTML", data=html, file_name="profiling.html", mime="text/html")
-            st.components.v1.html(html, height=800, scrolling=True)
+            st.components.v1.html(html, height=600, scrolling=True)
+
+            st.markdown("---")
+            st.subheader("Background profiling")
+            if st.button("Run profiling in background"):
+                def _make_profile(d):
+                    from ydata_profiling import ProfileReport as _PR
+
+                    p = _PR(d, minimal=False)
+                    return p.to_html()
+
+                task_id = run_in_background(_make_profile, st.session_state["df"], task_name=f"profile_{uuid.uuid4().hex}")
+                st.session_state["last_profile_task"] = task_id
+                st.success(f"Submitted profiling job (task id: {task_id}). Refresh to check status.")
+
+            if "last_profile_task" in st.session_state:
+                tid = st.session_state["last_profile_task"]
+                status, result = get_task_status(tid)
+                st.write("Background task:", tid)
+                if status == "running":
+                    st.info("Profiling is still running in background. Refresh to check status.")
+                elif status == "done":
+                    st.success("Profiling complete. You can download the HTML below.")
+                    if isinstance(result, str):
+                        path, data = save_html_result(result)
+                        st.write(f"Saved background result to: {path}")
+                        st.download_button("Download background profiling HTML", data=data, file_name=Path(path).name, mime="text/html")
+                        st.components.v1.html(result, height=600, scrolling=True)
+                elif status == "error":
+                    st.error(f"Background profiling failed: {result}")
+                elif status == "cancelled":
+                    st.warning("Background profiling was cancelled.")
+                else:
+                    st.write(status)
 
             # Reporting: generate downloadable HTML / PDF
             with st.expander("Generate report (HTML / PDF)"):
@@ -76,6 +113,7 @@ with tabs[0]:
                     st.download_button("Download report PDF", data=pdf_bytes, file_name="report.pdf", mime="application/pdf")
                 else:
                     st.info("PDF export not available (requires wkhtmltopdf installed). You can still download HTML.")
+
                 # S3 upload
                 st.markdown("**Upload report to S3 (optional)**")
                 s3_bucket = st.text_input("S3 bucket (optional)")
@@ -114,7 +152,6 @@ with tabs[0]:
                             st.error("No dataframe to publish.")
                         else:
                             if dry_run:
-                                # Build CSV payload and metadata preview
                                 csv_bytes = df_to_publish.to_csv(index=False).encode("utf-8")
                                 st.info("Dry-run: no external calls will be made. Showing payload preview.")
                                 st.write("Tableau publish metadata:")
@@ -155,7 +192,6 @@ with tabs[0]:
                         else:
                             if dry_run:
                                 st.info("Dry-run: showing Power BI dataset payload (no external calls).")
-                                # build dataset schema
                                 cols = []
                                 for col in df_to_publish.columns:
                                     dt = df_to_publish[col].dtype
@@ -173,9 +209,9 @@ with tabs[0]:
                                 st.json(payload)
                                 st.write("Sample rows (first 5):")
                                 st.json(df_to_publish.head(5).to_dict(orient="records"))
-                                # provide JSON download of the payload for dry-run
                                 try:
                                     import json as _json
+
                                     st.download_button("Download Power BI payload (JSON)", data=_json.dumps(payload, indent=2).encode("utf-8"), file_name="powerbi_payload.json", mime="application/json")
                                 except Exception:
                                     st.warning("Could not prepare download for payload.")
@@ -185,9 +221,11 @@ with tabs[0]:
                                 st.json(res)
                     except Exception as e:
                         st.error(f"Power BI publish failed: {e}")
+        # top-level profiling/overview error handler
         except Exception as e:
             st.error(f"Profiling failed: {e}")
 
+# Data Preview tab
 with tabs[1]:
     st.header("Editable Data Table")
     if "df" not in st.session_state or st.session_state["df"] is None:
@@ -196,8 +234,9 @@ with tabs[1]:
         st.markdown("Use the table below to edit cells, add/delete rows, paste from Excel, or drag-fill.")
         edited = st.data_editor(st.session_state["df"], num_rows="dynamic", use_container_width=True)
         st.session_state["df"] = edited
-        st.write(f"Rows: {len(edited)} — edits saved to session state")
+        st.write(f"Rows: {len(edited)} - edits saved to session state")
 
+# Cleaning tab
 with tabs[2]:
     st.header("Cleaning Tools")
     if "df" not in st.session_state or st.session_state["df"] is None:
@@ -252,6 +291,7 @@ with tabs[2]:
             st.session_state["df"] = df
             st.success("Conversion applied.")
 
+# Feature engineering
 with tabs[3]:
     st.header("Feature Engineering")
     if "df" not in st.session_state or st.session_state["df"] is None:
@@ -262,6 +302,7 @@ with tabs[3]:
             st.success("Features generated")
         st.dataframe(st.session_state["df"].head())
 
+# Dashboard builder
 with tabs[4]:
     st.header("Dashboard Builder")
     if "df" not in st.session_state or st.session_state["df"] is None:
@@ -296,6 +337,7 @@ with tabs[4]:
             except Exception:
                 st.info("PNG export requires kaleido; ensure it's installed.")
 
+# AI insights
 with tabs[5]:
     st.header("AI-Driven Insights")
     if "df" not in st.session_state or st.session_state["df"] is None:
@@ -314,281 +356,7 @@ if "df" in st.session_state and st.session_state["df"] is not None:
 st.sidebar.markdown("---")
 st.sidebar.info("Security: Use Streamlit secrets for API keys. Data is not persisted by this app.")
 
-
 if __name__ == "__main__":
-    # run main implicitly via Streamlit
+    # run via `streamlit run app.py`
     pass
-                df = st.session_state["df"]
 
-            fill_method = st.selectbox(
-                "Fill missing values with",
-                options=["Mean", "Median", "Mode"],
-                index=0,
-            )
-            if st.button("Apply fill"):
-                st.session_state["df"] = fill_missing_values(df, method=fill_method)
-                st.success(f"Filled missing values using {fill_method.lower()}.")
-                df = st.session_state["df"]
-
-        with st.sidebar.expander("Duplicates", expanded=False):
-            if st.button("Remove duplicate rows"):
-                st.session_state["df"] = remove_duplicates(df)
-                st.success("Removed duplicate rows.")
-                df = st.session_state["df"]
-
-        with st.sidebar.expander("Column operations", expanded=False):
-            cols_to_drop = st.multiselect(
-                "Drop columns",
-                options=df.columns.tolist(),
-                help="Remove columns that are not needed for analysis.",
-            )
-            if st.button("Drop selected columns") and cols_to_drop:
-                st.session_state["df"] = drop_columns(df, cols_to_drop)
-                st.success(f"Dropped columns: {cols_to_drop}")
-                df = st.session_state["df"]
-
-            if st.checkbox("Rename columns"):
-                rename_from = st.selectbox("Column to rename", options=df.columns.tolist())
-                new_name = st.text_input("New name", value=rename_from)
-                if st.button("Apply rename") and new_name:
-                    st.session_state["df"] = rename_columns(df, {rename_from: new_name})
-                    st.success(f"Renamed {rename_from} → {new_name}")
-                    df = st.session_state["df"]
-
-            if st.checkbox("Convert column data type"):
-                col_to_convert = st.selectbox("Column", options=df.columns.tolist())
-                dtype_choice = st.selectbox(
-                    "Convert to",
-                    options=["numeric", "string", "category"],
-                )
-                if st.button("Convert type"):
-                    st.session_state["df"] = convert_column_type(df, col_to_convert, dtype_choice)
-                    st.success(f"Converted {col_to_convert} to {dtype_choice}.")
-                    df = st.session_state["df"]
-
-        with st.sidebar.expander("Filter rows", expanded=False):
-            st.write("Create a simple filter by selecting a column, operator, and value.")
-            filter_col = st.selectbox("Column", options=df.columns.tolist())
-            if filter_col:
-                operators = ["==", "!=", ">", "<", ">=", "<=", "contains"]
-                op = st.selectbox("Operator", options=operators)
-                raw_value = st.text_input(
-                    "Value", help="Enter value to compare against (numeric or text)."
-                )
-                if st.button("Apply filter") and raw_value:
-                    try:
-                        st.session_state["df"] = filter_rows(df, filter_col, op, raw_value)
-                        st.success("Filtered dataset.")
-                        df = st.session_state["df"]
-                    except Exception as e:
-                        st.error(f"Filter failed: {e}")
-
-        st.sidebar.markdown("---")
-        if st.sidebar.button("Reset dataset"):
-            reset_data()
-            st.experimental_rerun()
-
-        # Main page tabs
-        tabs = st.tabs(["Data Preview", "Data Cleaning", "Visualization", "Statistics", "Export"])
-
-        # Data Preview
-        with tabs[0]:
-            st.subheader("Data Preview")
-            st.markdown("**First rows of the dataset:**")
-            st.dataframe(df.head(10), use_container_width=True)
-
-            st.markdown("**Dataset information:**")
-            st.text(format_dataframe_info(df))
-
-        # Data Cleaning
-        with tabs[1]:
-            st.subheader("Data Cleaning Operations")
-            st.markdown(
-                "Use the controls in the sidebar to clean and transform the dataset. The preview updates immediately."
-            )
-            st.dataframe(df.head(10), use_container_width=True)
-
-        # Visualization
-        with tabs[2]:
-            st.subheader("Visualization")
-            st.markdown("Create interactive charts from your dataset.")
-
-            numeric_cols = get_numeric_columns(df)
-            all_cols = df.columns.tolist()
-
-            # Persist visualization selections in session state
-            chart_options = [
-                "Histogram",
-                "Bar chart",
-                "Line chart",
-                "Scatter plot",
-                "Box plot",
-                "Correlation heatmap",
-                "Pair plot",
-            ]
-            if "vis_chart_type" not in st.session_state or st.session_state["vis_chart_type"] not in chart_options:
-                st.session_state["vis_chart_type"] = chart_options[0]
-
-            # Suggestion panel (does not auto-run charts, but provides recommended starting points)
-            suggestions = get_visualization_suggestions(df)
-            if suggestions:
-                st.markdown("#### Suggested charts")
-                for i, suggestion in enumerate(suggestions):
-                    cols = st.columns([4, 1])
-                    cols[0].write(f"- **{suggestion['label']}**")
-                    if cols[1].button("Use", key=f"suggest_{i}"):
-                        st.session_state["vis_chart_type"] = suggestion["chart_type"]
-                        st.session_state["vis_x_col"] = suggestion["x"]
-                        st.session_state["vis_y_col"] = suggestion["y"]
-                        st.experimental_rerun()
-
-            chart_type = st.selectbox(
-                "Chart type",
-                options=chart_options,
-                key="vis_chart_type",
-            )
-
-            x_col = None
-            y_col = None
-
-            if chart_type == "Histogram":
-                options = numeric_cols or all_cols
-                if options:
-                    if "vis_x_col" not in st.session_state or st.session_state["vis_x_col"] not in options:
-                        st.session_state["vis_x_col"] = options[0]
-                    x_col = st.selectbox("Column", options=options, key="vis_x_col")
-            elif chart_type in [
-                "Bar chart",
-                "Line chart",
-                "Scatter plot",
-                "Box plot",
-            ]:
-                if all_cols:
-                    if "vis_x_col" not in st.session_state or st.session_state["vis_x_col"] not in all_cols:
-                        st.session_state["vis_x_col"] = all_cols[0]
-                    x_col = st.selectbox("X axis", options=all_cols, key="vis_x_col")
-
-                if numeric_cols:
-                    if "vis_y_col" not in st.session_state or st.session_state["vis_y_col"] not in numeric_cols:
-                        st.session_state["vis_y_col"] = numeric_cols[0]
-                    y_col = st.selectbox("Y axis", options=numeric_cols or all_cols, key="vis_y_col")
-
-            plot = None
-            if st.button("Generate chart"):
-                try:
-                    if chart_type == "Correlation heatmap":
-                        plot = plot_correlation_heatmap(df)
-                    elif chart_type == "Pair plot":
-                        plot = plot_pairplot(df, numeric_cols)
-                    else:
-                        plot = plot_chart(df, chart_type, x_col, y_col)
-
-                    if plot is not None:
-                        st.plotly_chart(plot, use_container_width=True)
-
-                        png = plot.to_image(format="png")
-                        st.download_button(
-                            "Download chart as PNG",
-                            data=png,
-                            file_name="chart.png",
-                            mime="image/png",
-                        )
-                except Exception as e:
-                    st.error(f"Failed to create chart: {e}")
-
-        # Statistics
-        with tabs[3]:
-            st.subheader("Statistical Analysis")
-            st.markdown(
-                "View summary statistics, correlation matrices, and perform simple regression and outlier detection."
-            )
-
-            cols_for_stats = st.multiselect(
-                "Columns for statistics",
-                options=numeric_cols,
-                default=numeric_cols[:3],
-                help="Select numeric columns to include in the statistics.",
-            )
-            stats = None
-            if cols_for_stats:
-                stats = describe_data(df[cols_for_stats])
-                st.markdown("**Descriptive statistics:**")
-                st.dataframe(stats, use_container_width=True)
-
-                st.markdown("**Correlation matrix:**")
-                corr = compute_correlation(df[cols_for_stats])
-                st.dataframe(corr, use_container_width=True)
-
-                st.markdown("**Covariance matrix:**")
-                cov = compute_covariance(df[cols_for_stats])
-                st.dataframe(cov, use_container_width=True)
-
-            st.markdown("---")
-            st.subheader("Simple linear regression")
-            if len(numeric_cols) >= 2:
-                reg_x = st.selectbox("Predictor (X)", options=numeric_cols, key="reg_x")
-                reg_y = st.selectbox(
-                    "Target (Y)", options=[c for c in numeric_cols if c != reg_x], key="reg_y"
-                )
-                if st.button("Run regression"):
-                    try:
-                        result = compute_regression(df, reg_x, reg_y)
-                        st.markdown("**Regression results:**")
-                        st.write(result["summary"])
-                        st.markdown("**Model coefficients:**")
-                        st.write(result["coefficients"])
-                        st.markdown("**R² score:**")
-                        st.write(result["r2_score"])
-                        st.markdown("**Mean squared error:**")
-                        st.write(result["mse"])
-                    except Exception as e:
-                        st.error(f"Regression failed: {e}")
-
-            st.markdown("---")
-            st.subheader("Outlier detection")
-            outlier_method = st.selectbox("Method", options=["Z-score", "IQR"])
-            outlier_col = st.selectbox("Column", options=numeric_cols, key="outlier_col")
-            if st.button("Detect outliers"):
-                if outlier_method == "Z-score":
-                    outliers = detect_outliers_zscore(df, outlier_col)
-                else:
-                    outliers = detect_outliers_iqr(df, outlier_col)
-                st.write(f"Outliers detected: {len(outliers)}")
-                if len(outliers) > 0:
-                    st.dataframe(outliers[[outlier_col]].head(20), use_container_width=True)
-
-        # Export
-        with tabs[4]:
-            st.subheader("Export")
-            st.markdown("Download the cleaned dataset and analysis outputs.")
-
-            csv = df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "Download dataset as CSV",
-                data=csv,
-                file_name="cleaned_dataset.csv",
-                mime="text/csv",
-            )
-
-            if stats is not None:
-                stats_csv = stats.to_csv().encode("utf-8")
-                st.download_button(
-                    "Download summary statistics",
-                    data=stats_csv,
-                    file_name="summary_statistics.csv",
-                    mime="text/csv",
-                )
-
-            st.markdown("**Quick tips:**")
-            st.markdown(
-                "- Use the 'Data Cleaning' tab to remove missing values and duplicates.\n"
-                "- Use the 'Visualization' tab to explore relationships between columns.\n"
-                "- Use the 'Statistics' tab to see summary metrics and correlations."
-            )
-
-    else:
-        st.info("Upload a CSV or Excel file in the sidebar to get started.")
-
-
-if __name__ == "__main__":
-    main()

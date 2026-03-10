@@ -7,11 +7,22 @@ access to the Power BI workspace or the app uses delegated permission.
 import requests
 import pandas as pd
 from typing import Optional
-import msal
+
+try:
+    import msal
+except Exception:
+    msal = None
+
+
+def _ensure_msal():
+    if msal is None:
+        raise ImportError("msal is required for Power BI auth. Install with `pip install msal`.")
+    return msal
 
 
 def get_powerbi_token(tenant_id: str, client_id: str, client_secret: str, scope: str = "https://analysis.windows.net/powerbi/api/.default") -> str:
-    app = msal.ConfidentialClientApplication(client_id, authority=f"https://login.microsoftonline.com/{tenant_id}", client_credential=client_secret)
+    msal_mod = _ensure_msal()
+    app = msal_mod.ConfidentialClientApplication(client_id, authority=f"https://login.microsoftonline.com/{tenant_id}", client_credential=client_secret)
     resp = app.acquire_token_for_client(scopes=[scope])
     if "access_token" not in resp:
         raise RuntimeError(f"Failed to acquire token: {resp}")
