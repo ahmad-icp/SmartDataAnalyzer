@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from pathlib import Path
+import os
 from io import BytesIO
 import uuid
 
@@ -17,12 +17,22 @@ from visualization import make_chart, export_plotly_png
 from ai_insights import generate_insights
 from reporting import generate_html_report, html_to_pdf_bytes, upload_bytes_to_s3, generate_presigned_url
 from modules.background_tasks import run_in_background, get_task_status
-from modules.autosave import save_html_result
 from feature_engineering import generate_basic_features
 from tableau_publisher import publish_dataframe_to_tableau
 from powerbi_publisher import publish_dataframe_to_powerbi
 
 st.set_page_config(page_title="Smart Data Analyzer - Pro", layout="wide")
+
+
+def _secret_or_env(key: str, default: str = "") -> str:
+    try:
+        if hasattr(st, "secrets") and key in st.secrets:
+            val = st.secrets.get(key)
+            if val is not None and val != "":
+                return val
+    except Exception:
+        pass
+    return os.environ.get(key, default)
 
 st.markdown("""
 <style>
@@ -92,9 +102,9 @@ with tabs[0]:
                 elif status == "done":
                     st.success("Profiling complete. You can download the HTML below.")
                     if isinstance(result, str):
-                        path, data = save_html_result(result)
-                        st.write(f"Saved background result to: {path}")
-                        st.download_button("Download background profiling HTML", data=data, file_name=Path(path).name, mime="text/html")
+                        data = result.encode("utf-8")
+                        fname = f"profile_{tid}.html"
+                        st.download_button("Download background profiling HTML", data=data, file_name=fname, mime="text/html")
                         st.components.v1.html(result, height=600, scrolling=True)
                 elif status == "error":
                     st.error(f"Background profiling failed: {result}")
@@ -112,7 +122,7 @@ with tabs[0]:
                 if pdf_bytes:
                     st.download_button("Download report PDF", data=pdf_bytes, file_name="report.pdf", mime="application/pdf")
                 else:
-                    st.info("PDF export not available (requires wkhtmltopdf installed). You can still download HTML.")
+                    st.info("PDF export not available (requires reportlab). You can still download HTML.")
 
                 # S3 upload
                 st.markdown("**Upload report to S3 (optional)**")
@@ -130,19 +140,19 @@ with tabs[0]:
                 # Tableau publishing
                 st.markdown("**Publish report / datasource to Tableau**")
                 dry_run = st.checkbox("Dry-run (simulate publish, no external calls)", value=True)
-                tableau_server = st.text_input("Tableau Server URL (e.g. https://your-server)", value=st.secrets.get("TABLEAU_SERVER") if hasattr(st, "secrets") else "")
-                tableau_site = st.text_input("Tableau site", value=st.secrets.get("TABLEAU_SITE") if hasattr(st, "secrets") else "")
-                tableau_project = st.text_input("Tableau project name", value=st.secrets.get("TABLEAU_PROJECT") if hasattr(st, "secrets") else "")
+                tableau_server = st.text_input("Tableau Server URL (e.g. https://your-server)", value=_secret_or_env("TABLEAU_SERVER"))
+                tableau_site = st.text_input("Tableau site", value=_secret_or_env("TABLEAU_SITE"))
+                tableau_project = st.text_input("Tableau project name", value=_secret_or_env("TABLEAU_PROJECT"))
                 tableau_datasource = st.text_input("Datasource name", value="smartdata_ds")
                 tableau_auth = st.selectbox("Auth method", ["pat", "userpass"])
                 if tableau_auth == "pat":
-                    token_name = st.text_input("Token name", value=st.secrets.get("TABLEAU_TOKEN_NAME") if hasattr(st, "secrets") else "")
-                    token_value = st.text_input("Token value (keep secret)", value=st.secrets.get("TABLEAU_TOKEN_VALUE") if hasattr(st, "secrets") else "", type="password")
+                    token_name = st.text_input("Token name", value=_secret_or_env("TABLEAU_TOKEN_NAME"))
+                    token_value = st.text_input("Token value (keep secret)", value=_secret_or_env("TABLEAU_TOKEN_VALUE"), type="password")
                     username = None
                     password = None
                 else:
-                    username = st.text_input("Tableau username", value=st.secrets.get("TABLEAU_USERNAME") if hasattr(st, "secrets") else "")
-                    password = st.text_input("Tableau password", value=st.secrets.get("TABLEAU_PASSWORD") if hasattr(st, "secrets") else "", type="password")
+                    username = st.text_input("Tableau username", value=_secret_or_env("TABLEAU_USERNAME"))
+                    password = st.text_input("Tableau password", value=_secret_or_env("TABLEAU_PASSWORD"), type="password")
                     token_name = token_value = None
 
                 if st.button("Publish current dataframe to Tableau"):
@@ -179,10 +189,10 @@ with tabs[0]:
 
                 # Power BI publishing
                 st.markdown("**Publish dataset to Power BI (push dataset)**")
-                p_tenant = st.text_input("Azure Tenant ID", value=st.secrets.get("PBI_TENANT") if hasattr(st, "secrets") else "")
-                p_client = st.text_input("Azure Client ID", value=st.secrets.get("PBI_CLIENT_ID") if hasattr(st, "secrets") else "")
-                p_secret = st.text_input("Azure Client Secret (keep secret)", value=st.secrets.get("PBI_CLIENT_SECRET") if hasattr(st, "secrets") else "", type="password")
-                p_group = st.text_input("Power BI Workspace (group) ID", value=st.secrets.get("PBI_GROUP_ID") if hasattr(st, "secrets") else "")
+                p_tenant = st.text_input("Azure Tenant ID", value=_secret_or_env("PBI_TENANT"))
+                p_client = st.text_input("Azure Client ID", value=_secret_or_env("PBI_CLIENT_ID"))
+                p_secret = st.text_input("Azure Client Secret (keep secret)", value=_secret_or_env("PBI_CLIENT_SECRET"), type="password")
+                p_group = st.text_input("Power BI Workspace (group) ID", value=_secret_or_env("PBI_GROUP_ID"))
                 p_dataset = st.text_input("Dataset name", value="smartdata_dataset")
                 if st.button("Publish to Power BI"):
                     try:

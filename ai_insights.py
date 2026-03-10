@@ -4,9 +4,9 @@ import numpy as np
 import streamlit as st
 
 try:
-    import openai
+    from openai import OpenAI
 except Exception:
-    openai = None
+    OpenAI = None
 
 
 def _local_insights(df: pd.DataFrame) -> list:
@@ -37,13 +37,24 @@ def _local_insights(df: pd.DataFrame) -> list:
 
 def generate_insights(df: pd.DataFrame) -> list:
     # Prefer OpenAI if configured
-    key = st.secrets.get("OPENAI_API_KEY") if "secrets" in dir(st) else os.environ.get("OPENAI_API_KEY")
+    key = None
+    try:
+        if hasattr(st, "secrets") and "OPENAI_API_KEY" in st.secrets:
+            key = st.secrets.get("OPENAI_API_KEY")
+    except Exception:
+        key = None
+    if not key:
+        key = os.environ.get("OPENAI_API_KEY")
     prompt = None
-    if key and openai is not None:
+    if key and OpenAI is not None:
         try:
-            openai.api_key = key
+            client = OpenAI(api_key=key)
             prompt = f"Provide 6 concise insights about this dataset: columns {list(df.columns[:10])}. Summarize missingness, high correlations, and suggested visualizations."
-            resp = openai.ChatCompletion.create(model="gpt-4o-mini", messages=[{"role":"user","content":prompt}], max_tokens=400)
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=400,
+            )
             text = resp.choices[0].message.content
             return [t.strip() for t in text.split("\n") if t.strip()]
         except Exception:

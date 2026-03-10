@@ -44,6 +44,18 @@ Deployment
 - Streamlit Community Cloud: create a new app, link to this repository, and add any secrets (OpenAI key) under the app settings.
 - For enterprise deployment, run behind a secure HTTPS endpoint and follow your org's SOC2 policies. Use secrets management for API keys and do not embed them in source.
 
+Streamlit Cloud secrets
+
+- Open your app settings -> Secrets and paste your TOML (use `.streamlit/secrets.toml` as the template).
+- The app reads `st.secrets` first, then environment variables for the same keys.
+
+Docker
+
+```bash
+docker build -t smart-data-analyzer .
+docker run -p 8501:8501 smart-data-analyzer
+```
+
 Integrations
 
 - Tableau / Power BI: export cleaned datasets as CSV/Excel and import into Tableau or Power BI. For automated flows, write the cleaned file to a shared location or cloud storage (S3/GC Storage) and connect Tableau/Power BI to that source.
@@ -51,9 +63,8 @@ Integrations
 Notes
 
 - PNG export of Plotly charts requires `kaleido`.
-- Generating PDF reports: the app attempts to convert HTML to PDF using `wkhtmltopdf` via `pdfkit` if it's installed on the host. Install `wkhtmltopdf` on your server (or use a hosted conversion service) to enable one-click PDF exports.
+- PDF reports are generated with `reportlab` (no external binaries required).
 - S3 uploads: provide AWS credentials via Streamlit secrets or environment variables. The app can upload generated reports and create presigned URLs which you can use in Tableau/Power BI as a data source.
- - S3 uploads: provide AWS credentials via Streamlit secrets or environment variables. The app can upload generated reports and create presigned URLs which you can use in Tableau/Power BI as a data source.
 
 Tableau & Power BI publishing
 

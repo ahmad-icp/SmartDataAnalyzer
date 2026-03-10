@@ -1,12 +1,16 @@
 from typing import Optional
-import os
-import tempfile
-import shutil
+import re
+from html import unescape
+from io import BytesIO
 
 try:
-    import pdfkit
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.utils import simpleSplit
+    from reportlab.pdfgen import canvas
 except Exception:
-    pdfkit = None
+    letter = None
+    simpleSplit = None
+    canvas = None
 
 
 def generate_html_report(profile_html: str, extra_html: str = "") -> str:
@@ -15,41 +19,56 @@ def generate_html_report(profile_html: str, extra_html: str = "") -> str:
     return f"<!doctype html><html><head><meta charset='utf-8'></head><body>{profile_html}<hr>{extra_html}</body></html>"
 
 
-def _resolve_wkhtmltopdf() -> Optional[str]:
-    path = os.environ.get("WKHTMLTOPDF_PATH") or os.environ.get("WKHTMLTOPDF")
-    if path and os.path.exists(path):
-        return path
-    return shutil.which("wkhtmltopdf")
+def _html_to_text(html: str) -> str:
+    # Strip script/style and tags, then unescape entities.
+    text = re.sub(r"(?is)<(script|style).*?>.*?</\\1>", "", html)
+    text = re.sub(r"(?s)<.*?>", "", text)
+    text = unescape(text)
+    # Normalize whitespace
+    lines = [ln.strip() for ln in text.splitlines()]
+    return "\n".join([ln for ln in lines if ln])
 
 
 def html_to_pdf_bytes(html: str) -> Optional[bytes]:
-    """Convert HTML string to PDF bytes using wkhtmltopdf (via pdfkit).
-    Returns None if conversion failed or wkhtmltopdf not available.
+    """Convert HTML string to PDF bytes using ReportLab.
+    Returns None if conversion failed or ReportLab not available.
     """
-    if pdfkit is None:
+    if canvas is None or letter is None or simpleSplit is None:
         return None
-    tmp_path = None
     try:
-        # pdfkit requires wkhtmltopdf installed on the system
-        wk_path = _resolve_wkhtmltopdf()
-        config = pdfkit.configuration(wkhtmltopdf=wk_path) if wk_path else None
-        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-        tmp_path = tmp.name
-        tmp.close()
-        if config is None:
-            pdfkit.from_string(html, tmp_path)
-        else:
-            pdfkit.from_string(html, tmp_path, configuration=config)
-        with open(tmp_path, "rb") as f:
-            return f.read()
+        text = _html_to_text(html)
+        buf = BytesIO()
+        c = canvas.Canvas(buf, pagesize=letter)
+        width, height = letter
+        margin = 72
+        font_name = "Helvetica"
+        font_size = 10
+        line_height = 12
+        max_width = width - (2 * margin)
+        y = height - margin
+
+        c.setFont(font_name, font_size)
+        for raw_line in text.splitlines():
+            if not raw_line.strip():
+                y -= line_height
+            else:
+                wrapped = simpleSplit(raw_line, font_name, font_size, max_width)
+                for line in wrapped:
+                    c.drawString(margin, y, line)
+                    y -= line_height
+                    if y <= margin:
+                        c.showPage()
+                        c.setFont(font_name, font_size)
+                        y = height - margin
+            if y <= margin:
+                c.showPage()
+                c.setFont(font_name, font_size)
+                y = height - margin
+
+        c.save()
+        return buf.getvalue()
     except Exception:
         return None
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except Exception:
-                pass
 
 
 def upload_bytes_to_s3(bucket: str, key: str, data: bytes, region: Optional[str] = None, acl: str = "private") -> dict:
