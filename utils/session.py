@@ -15,6 +15,10 @@ STATE_DEFAULTS: dict[str, object] = {
     "target_column": None,
     "model_payload": None,
     "insights": [],
+    "diagnostics": {},
+    "issues": [],
+    "dci": None,
+    "ui_mode": "Learning",
     "upload_hash": None,
 }
 
@@ -42,6 +46,9 @@ def set_dataset(df: pd.DataFrame, upload_hash: str) -> None:
     st.session_state["target_column"] = None
     st.session_state["model_payload"] = None
     st.session_state["insights"] = []
+    st.session_state["diagnostics"] = {}
+    st.session_state["issues"] = []
+    st.session_state["dci"] = None
 
 
 def reset_app() -> None:

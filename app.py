@@ -1,51 +1,48 @@
-"""Smart Data Analyzer multi-page landing page."""
-
 from __future__ import annotations
 
 import streamlit as st
 
 from utils.session import initialize_state, reset_app
 
-st.set_page_config(page_title="Smart Data Analyzer", layout="wide")
+st.set_page_config(page_title="CDAS", layout="wide")
 initialize_state()
 
 with st.sidebar:
-    st.header("Control Panel")
-    st.caption("Use pages in the left navigation to move through the workflow.")
+    st.header("CDAS Control Panel")
+    mode = st.radio("Mode", ["Learning", "Expert"], horizontal=True)
+    st.session_state["ui_mode"] = mode
     if st.button("Reset App"):
         reset_app()
-        st.success("Application state cleared.")
+        st.success("Session reset completed.")
         st.stop()
-    st.progress(0.1)
-    st.info("Workflow: Upload → EDA → Cleaning → Feature Engineering → Modeling → Results")
+    st.info("Navigate through pages 1→7 for end-to-end cognitive analysis.")
 
-st.title("📊 Smart Data Analyzer")
-st.subheader("Production-ready, user-controlled, AI-free intelligence platform")
+st.title("🧠 Cognitive Data Analysis System (CDAS)")
+st.caption("Research-grade, API-free intelligent data analysis platform")
+st.info("Key Insight: CDAS simulates AI reasoning using local statistical logic and machine learning heuristics.")
 st.divider()
 
 st.markdown(
     """
-Welcome to **Smart Data Analyzer**.
-
-This multi-page app provides:
-- Dataset upload and validation
-- Rule-based intelligence insights
-- Guided EDA and cleaning
-- Feature engineering
-- Manual/automatic modeling controls
-- Results and downloadable outputs
-
-Use the left sidebar page navigation to begin with **Data Upload**.
+### Navigation
+1. **Upload**
+2. **Data Diagnosis**
+3. **Smart Cleaning**
+4. **Feature Intelligence**
+5. **Model Advisor**
+6. **Results & Insights**
+7. **Report Generator**
 """
 )
 
-with st.expander("How to use", expanded=False):
+with st.expander("System capabilities", expanded=mode == "Learning"):
     st.markdown(
         """
-1. Open **Data Upload** and upload a CSV.
-2. Review diagnostics in **EDA**.
-3. Apply transformations in **Data Cleaning** and **Feature Engineering**.
-4. Train models in **Modeling**.
-5. Review metrics and download output in **Results**.
+- Multi-step issue reasoning (severity, rationale, recommendation, confidence)
+- Dataset Complexity Index (DCI)
+- Data Health diagnosis (completeness, consistency, redundancy, balance)
+- Adaptive preprocessing pipeline generator
+- Explainable model advisor + error simulation
+- Downloadable research-style reports
 """
     )
