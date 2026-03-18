@@ -329,14 +329,13 @@ else:
 
         unique_values = [str(v).strip() for v in working_df[selected_cat_col].dropna().unique() if str(v).strip()]
         ai_mapping: dict[str, str] = {}
-        use_ai = st.checkbox("Use OpenAI suggestions", value=False)
+        use_ai = st.checkbox("Use heuristic normalization suggestions", value=False)
         if use_ai:
             try:
-                api_key = st.secrets.get("OPENAI_API_KEY", "")
-                ai_mapping = ai_suggest_corrections(unique_values, api_key=api_key)
-                st.success("AI suggestions loaded.")
+                ai_mapping = ai_suggest_corrections(unique_values)
+                st.success("Heuristic suggestions loaded.")
             except Exception as exc:
-                st.warning(f"OpenAI suggestion unavailable: {exc}")
+                st.warning(f"Suggestion engine unavailable: {exc}")
 
         if not groups:
             st.info("No strong correction groups detected.")

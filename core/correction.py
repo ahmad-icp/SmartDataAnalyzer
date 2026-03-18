@@ -1,9 +1,8 @@
-"""Intelligent categorical correction using fuzzy matching."""
+"""Intelligent categorical correction using local fuzzy and heuristic logic."""
 
 from __future__ import annotations
 
-import json
-import importlib.util
+from collections import Counter
 
 import pandas as pd
 from rapidfuzz import fuzz
@@ -35,7 +34,7 @@ def suggest_corrections(series: pd.Series, threshold: int = 85) -> list[dict[str
 
 
 def apply_corrections(df: pd.DataFrame, column: str, corrections: list[dict[str, object]]) -> pd.DataFrame:
-    """Apply accepted fuzzy correction groups to a column."""
+    """Apply accepted correction groups to a column."""
     mapping: dict[str, str] = {}
     for item in corrections:
         suggested = str(item["suggested"])
@@ -47,32 +46,19 @@ def apply_corrections(df: pd.DataFrame, column: str, corrections: list[dict[str,
     return out
 
 
-def ai_suggest_corrections(values: list[str], api_key: str, model: str = "gpt-4.1-mini") -> dict[str, str]:
-    """Use OpenAI to suggest normalized category mappings for unique values."""
-    if not values:
+def ai_suggest_corrections(values: list[str], api_key: str = "", model: str = "") -> dict[str, str]:
+    """Local heuristic normalization mapping (API-free compatibility wrapper)."""
+    del api_key, model
+    clean_values = [str(v).strip() for v in values if str(v).strip()]
+    if not clean_values:
         return {}
-    if not api_key:
-        raise ValueError("OpenAI API key is required.")
 
-    if importlib.util.find_spec("openai") is None:
-        raise RuntimeError("openai package is not installed.")
+    normalized = [v.upper().replace("_", " ").replace("-", " ") for v in clean_values]
+    mapping: dict[str, str] = {}
+    counter = Counter(normalized)
 
-    from openai import OpenAI
+    for original, norm in zip(clean_values, normalized):
+        canonical = max((n for n in counter if fuzz.ratio(norm, n) >= 85), key=lambda n: (counter[n], len(n)))
+        mapping[original] = canonical
 
-    client = OpenAI(api_key=api_key)
-    prompt = (
-        "Normalize the following categorical values into consistent labels. "
-        "Return JSON object mapping each original value to its normalized label. "
-        "Keep labels concise and consistent.\n\n"
-        f"Values: {values}"
-    )
-    response = client.responses.create(
-        model=model,
-        input=prompt,
-        max_output_tokens=600,
-    )
-    content = response.output_text.strip()
-    mapping = json.loads(content)
-    if not isinstance(mapping, dict):
-        raise ValueError("Model output is not a valid JSON object.")
-    return {str(k): str(v) for k, v in mapping.items()}
+    return mapping
