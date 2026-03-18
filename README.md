@@ -1,79 +1,81 @@
-# Smart Data Analyzer
-A professional Streamlit-based data analysis platform. Key capabilities:
+# 🔥 SmartDataAnalyzer Pro: Intelligent Data Analysis Platform
 
-- Editable data table with `st.data_editor` (dynamic rows, paste from Excel, drag-fill).
-- Advanced cleaning: fill missing (mean/median/mode/custom), deduplication (exact + fuzzy), text standardization, type conversion.
-- Automated profiling via YData/Pandas-Profiling with downloadable HTML report.
-- AI-driven insights (OpenAI optional) to summarize dataset, spot correlations/outliers, and suggest charts.
-- Feature engineering (date parts, log, normalize, group aggregates).
-- Dashboard builder with interactive filters and multi-chart export.
-- Export cleaned data as CSV/Excel and charts as PNG.
+SmartDataAnalyzer Pro is a production-style analytics platform that transforms a raw CSV into actionable intelligence through automated diagnostics, data quality scoring, model selection, explainability, and uncertainty-aware predictions.
 
-Security & privacy
+## Problem Statement
 
-- No secrets are hard-coded. Put API keys (e.g., `OPENAI_API_KEY`) into Streamlit secrets or environment variables.
-- Uploaded data is kept in-memory in the Streamlit session and not persisted by default. Do not upload sensitive data unless you control the deployment environment.
+Teams often spend most of their project time manually inspecting messy datasets before they can model anything useful. SmartDataAnalyzer Pro reduces this friction by orchestrating a guided, end-to-end workflow that surfaces quality issues, recommendations, and model insights in one professional interface.
 
-Installation
+## Key Features
 
-1. Create and activate a Python virtual environment:
+- **7-step guided workflow UI** (Upload → EDA → Cleaning → Correction → Feature Engineering → Model Training → Insights & Results).
+- **Automated Insight Engine** that generates human-readable data, model, and feature insights.
+- **Data Quality Score (0–100)** with penalty breakdown for missing values, duplicates, outliers, and inconsistent categories.
+- **Smart recommendations** for imputation strategy, correlated feature handling, and model family suitability.
+- **AutoML-lite training pipeline** for both classification and regression.
+- **Evaluation suite** with confusion matrix / RMSE-MAE and overfitting signals.
+- **SHAP explainability** for global and local model interpretation.
+- **Uncertainty estimation** using Bayesian Ridge prediction intervals.
+- **Interactive visual analytics** powered by Plotly.
+
+## System Architecture
+
+```text
+SmartDataAnalyzer/
+├── app/
+│   ├── main.py                # Product-grade Streamlit workflow
+│   └── ui_components.py       # Reusable UI blocks and progress flow
+├── core/
+│   ├── cleaning.py            # Data cleaning + recommendations
+│   ├── correction.py          # Fuzzy category normalization
+│   ├── data_quality.py        # Quality score computation (0-100)
+│   ├── eda.py                 # EDA summaries and diagnostics
+│   ├── evaluation.py          # Task-specific metrics
+│   ├── explainability.py      # SHAP integration
+│   ├── feature_engineering.py # Encoding/scaling/feature diagnostics
+│   ├── insights.py            # Automated human-readable insight engine
+│   ├── model_selection.py     # AutoML-lite model benchmarking
+│   └── uncertainty.py         # Bayesian uncertainty intervals
+├── utils/
+│   ├── helpers.py
+│   ├── validators.py
+│   └── visualization.py
+└── tests/
+    ├── test_cleaning.py
+    ├── test_correction.py
+    ├── test_model_selection.py
+    ├── test_insights.py
+    └── test_data_quality.py
+```
+
+## Screenshots (Placeholders)
+
+- `docs/screenshots/01_workflow_overview.png`
+- `docs/screenshots/02_data_quality_dashboard.png`
+- `docs/screenshots/03_model_insights.png`
+
+## Demo Instructions
 
 ```bash
 python -m venv .venv
-.
-# Windows
-.\.venv\Scripts\activate
-# macOS / Linux
 source .venv/bin/activate
-```
-
-2. Install dependencies:
-
-```bash
 pip install -r requirements.txt
+streamlit run app/main.py
 ```
 
-3. Run locally:
+## Tech Stack
 
-```bash
-streamlit run app.py
-```
+- **Frontend:** Streamlit
+- **Data:** pandas, numpy
+- **ML:** scikit-learn
+- **Explainability:** SHAP
+- **Visualization:** Plotly, seaborn/matplotlib (optional fallback)
+- **Matching:** rapidfuzz
+- **Testing:** pytest
 
-Deployment
+## Future Improvements
 
-- Streamlit Community Cloud: create a new app, link to this repository, and add any secrets (OpenAI key) under the app settings.
-- For enterprise deployment, run behind a secure HTTPS endpoint and follow your org's SOC2 policies. Use secrets management for API keys and do not embed them in source.
-
-Streamlit Cloud secrets
-
-- Open your app settings -> Secrets and paste your TOML (use `.streamlit/secrets.toml` as the template).
-- The app reads `st.secrets` first, then environment variables for the same keys.
-
-Docker
-
-```bash
-docker build -t smart-data-analyzer .
-docker run -p 8501:8501 smart-data-analyzer
-```
-
-Integrations
-
-- Tableau / Power BI: export cleaned datasets as CSV/Excel and import into Tableau or Power BI. For automated flows, write the cleaned file to a shared location or cloud storage (S3/GC Storage) and connect Tableau/Power BI to that source.
-
-Notes
-
-- PNG export of Plotly charts requires `kaleido`.
-- PDF reports are generated with `reportlab` (no external binaries required).
-- S3 uploads: provide AWS credentials via Streamlit secrets or environment variables. The app can upload generated reports and create presigned URLs which you can use in Tableau/Power BI as a data source.
-
-Tableau & Power BI publishing
-
-- Tableau: this repo includes `tableau_publisher.py` which uses `tableauserverclient` and optionally `tableauhyperapi` to publish a DataFrame as a datasource (best-effort). Install `tableauserverclient` and, for reliable datasource publishing, install `tableauhyperapi` and `hyper` runtime following Tableau's docs.
-- Power BI: `powerbi_publisher.py` demonstrates creating a push dataset and ingesting rows via the Power BI REST API. Requires an Azure AD app (client id/secret) or delegated auth; see MSAL docs and Power BI REST API docs for permissions.
-
-Security note: never commit service credentials in source. Use Streamlit secrets or environment variables to store AWS, Tableau, or Azure credentials.
-
-If you'd like, I can also:
-
-- Add S3 upload support, or
-- Wire direct Tableau/Power BI publishing steps.
+- Drift monitoring and automated retraining triggers
+- Experiment tracking (MLflow)
+- Role-based authentication and project workspaces
+- LLM-assisted narrative reporting and executive summaries
