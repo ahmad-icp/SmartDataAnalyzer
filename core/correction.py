@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
+import json
+import importlib.util
 
 import pandas as pd
 from rapidfuzz import fuzz
@@ -44,3 +45,34 @@ def apply_corrections(df: pd.DataFrame, column: str, corrections: list[dict[str,
     out = df.copy()
     out[column] = out[column].astype(str).map(lambda x: mapping.get(x, x))
     return out
+
+
+def ai_suggest_corrections(values: list[str], api_key: str, model: str = "gpt-4.1-mini") -> dict[str, str]:
+    """Use OpenAI to suggest normalized category mappings for unique values."""
+    if not values:
+        return {}
+    if not api_key:
+        raise ValueError("OpenAI API key is required.")
+
+    if importlib.util.find_spec("openai") is None:
+        raise RuntimeError("openai package is not installed.")
+
+    from openai import OpenAI
+
+    client = OpenAI(api_key=api_key)
+    prompt = (
+        "Normalize the following categorical values into consistent labels. "
+        "Return JSON object mapping each original value to its normalized label. "
+        "Keep labels concise and consistent.\n\n"
+        f"Values: {values}"
+    )
+    response = client.responses.create(
+        model=model,
+        input=prompt,
+        max_output_tokens=600,
+    )
+    content = response.output_text.strip()
+    mapping = json.loads(content)
+    if not isinstance(mapping, dict):
+        raise ValueError("Model output is not a valid JSON object.")
+    return {str(k): str(v) for k, v in mapping.items()}

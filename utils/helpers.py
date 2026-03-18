@@ -10,9 +10,7 @@ import pandas as pd
 
 def infer_task_type(target: pd.Series) -> str:
     """Infer whether the task is classification or regression."""
-    if target.dtype == "object" or target.nunique(dropna=True) <= 20:
-        return "classification"
-    if pd.api.types.is_integer_dtype(target) and target.nunique(dropna=True) <= 20:
+    if target.dtype == "object" or target.nunique(dropna=True) < 20:
         return "classification"
     return "regression"
 

@@ -7,4 +7,6 @@ seaborn
 plotly
 shap
 rapidfuzz
+openai
+openpyxl
 pytest
