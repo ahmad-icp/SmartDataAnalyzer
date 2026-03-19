@@ -28,7 +28,6 @@ CORE_IMPORTS = {
 OPTIONAL_IMPORTS = {
     "ydata-profiling": "ydata_profiling",
     "featuretools": "featuretools",
-    "openai": "openai",
     "kaleido": "kaleido",
     "boto3": "boto3",
     "tableauserverclient": "tableauserverclient",
@@ -133,7 +132,6 @@ def check_streamlit_launch():
 def check_secrets():
     secrets = load_secrets()
     groups = {
-        "OpenAI": ["OPENAI_API_KEY"],
         "S3": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_DEFAULT_REGION"],
         "Tableau": ["TABLEAU_SERVER", "TABLEAU_SITE", "TABLEAU_PROJECT", "TABLEAU_TOKEN_NAME", "TABLEAU_TOKEN_VALUE"],
         "PowerBI": ["PBI_TENANT", "PBI_CLIENT_ID", "PBI_CLIENT_SECRET", "PBI_GROUP_ID"],
