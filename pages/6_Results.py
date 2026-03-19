@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.ui_components import render_insight_banners, render_page_header, render_sidebar
 from core.intelligence_engine import detect_high_correlation
 from utils.session import initialize_state, reset_app
 
@@ -9,50 +10,45 @@ st.set_page_config(page_title="Results", layout="wide")
 initialize_state()
 
 with st.sidebar:
-    st.header("📂 Control Panel")
-    if st.button("Reset App"):
+    render_sidebar("results")
+    if st.button("Reset App", use_container_width=True):
         reset_app()
-        st.success("Application state cleared.")
+        st.success("Session reset complete.")
         st.stop()
 
-st.header("📈 Results")
-st.caption("Model outcome and workflow summary with interpretation.")
+render_page_header("📈", "Results", "Review model outcomes and processing impact.")
 
 if st.session_state.get("data") is None:
     st.warning("No dataset found. Complete Data Upload first.")
     st.stop()
 
 payload = st.session_state.get("model_payload")
-if payload is None:
-    st.warning("Key Insight: No model has been trained yet.")
+if payload:
+    render_insight_banners([f"Model {payload['metric'].upper()} score: {payload['score']:.4f}"])
 else:
-    st.success(f"Key Insight: Model {payload['metric'].upper()} = {payload['score']:.4f}")
+    render_insight_banners(["No model result available yet. Complete Modeling page."])
 
-st.info("Performance depends on data quality and preprocessing quality.")
+st.info("Model performance depends on preprocessing and feature selection quality.")
 
-summary_lines = []
+done = []
 if st.session_state.get("cleaned_data") is not None:
-    summary_lines.append("✅ Data Cleaning applied")
+    done.append("✅ Data Cleaning completed")
 if st.session_state.get("engineered_data") is not None:
-    summary_lines.append("✅ Feature Engineering applied")
+    done.append("✅ Feature Engineering completed")
 if payload is not None:
-    summary_lines.append(f"✅ Modeling completed ({payload['problem']})")
-
-if not summary_lines:
-    summary_lines.append("No processing steps completed yet.")
-
-for line in summary_lines:
+    done.append(f"✅ Modeling completed ({payload['problem']})")
+for line in done or ["No completed actions recorded."]:
     st.write(line)
 
-with st.expander("Additional Intelligent Warnings", expanded=False):
+with st.expander("Additional warnings", expanded=False):
     df = st.session_state.get("engineered_data") or st.session_state["data"]
     missing = int(df.isna().sum().sum())
-    if missing > 0:
-        st.warning(f"Missing values remain: {missing}")
     high_corr = detect_high_correlation(df)
+    if missing > 0:
+        st.warning(f"Missing values remaining: {missing}")
     if high_corr:
-        st.warning("High correlation still present. Consider feature reduction.")
+        st.warning("Strong feature correlation remains. Consider feature reduction.")
     if df.shape[1] > 50:
-        st.warning("Too many features detected. Consider feature selection.")
+        st.warning("High dimensionality remains. Consider feature selection.")
     if missing == 0 and not high_corr and df.shape[1] <= 50:
-        st.success("No major data quality warnings detected.")
+        st.success("No major quality risks detected in final dataset.")

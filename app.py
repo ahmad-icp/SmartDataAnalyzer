@@ -2,36 +2,39 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.ui_components import render_page_header, render_sidebar
 from utils.session import initialize_state, reset_app
 
 st.set_page_config(page_title="Smart Data Analyzer", layout="wide")
 initialize_state()
 
 with st.sidebar:
-    st.header("📂 Control Panel")
-    if st.button("Reset App"):
+    render_sidebar("upload")
+    if st.button("Reset App", use_container_width=True):
         reset_app()
-        st.success("Application state cleared.")
+        st.success("Session reset complete.")
         st.stop()
-    st.info("Navigate pages 1→6 for the full workflow.")
 
-st.header("📊 Smart Data Analyzer")
-st.caption("Professional multi-page intelligent data analysis app (API-free).")
+render_page_header(
+    icon="📊",
+    title="Smart Data Analyzer",
+    description="Modern multi-page analytics workspace for intelligent dataset diagnostics and modeling.",
+)
 
 if st.session_state.get("data") is None:
-    st.warning("No dataset loaded. Start from **1_Data_Upload**.")
+    st.info("No active dataset. Start from **📂 Data Upload** in the pages menu.")
 else:
     df = st.session_state["data"]
-    st.success(f"Active dataset: {df.shape[0]} rows × {df.shape[1]} columns")
+    st.success(f"Active dataset loaded: {df.shape[0]} rows × {df.shape[1]} columns")
 
-with st.expander("Workflow", expanded=False):
+with st.expander("Navigation Guide", expanded=False):
     st.markdown(
         """
-1. Data Upload
-2. EDA
-3. Data Cleaning
-4. Feature Engineering
-5. Modeling
-6. Results
+- 📂 Data Upload
+- 📊 EDA
+- 🧹 Data Cleaning
+- ⚙️ Feature Engineering
+- 🤖 Modeling
+- 📈 Results
 """
     )

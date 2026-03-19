@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.ui_components import render_insight_banners, render_page_header, render_sidebar, render_stat_cards
 from utils.session import compute_file_hash, initialize_state, reset_app, set_dataset
 from utils.validators import load_csv_bytes, validate_uploaded_file
 
@@ -9,36 +10,45 @@ st.set_page_config(page_title="Data Upload", layout="wide")
 initialize_state()
 
 with st.sidebar:
-    st.header("📂 Control Panel")
-    if st.button("Reset App"):
+    render_sidebar("upload")
+    if st.button("Reset App", use_container_width=True):
         reset_app()
-        st.success("Application state cleared.")
+        st.success("Session reset complete.")
         st.stop()
 
-st.header("📂 Data Upload")
-st.caption("Upload a CSV dataset to start the analysis pipeline.")
+render_page_header("📂", "Data Upload", "Upload and validate your dataset before analysis.")
+st.info("Accepted format: CSV files only. Max size: 200MB.")
 
-uploaded = st.file_uploader("Upload CSV", type=["csv"])
-if uploaded is None:
-    st.info("Key Insight: Upload a file to unlock EDA and modeling pages.")
+upload = st.file_uploader("Drag and drop CSV file", type=["csv"])
+if upload is None:
+    render_insight_banners(["Upload a dataset to unlock EDA, cleaning, feature engineering, and modeling."])
     st.stop()
 
-raw_bytes = uploaded.getvalue()
-validation = validate_uploaded_file(uploaded.name, raw_bytes)
+raw = upload.getvalue()
+validation = validate_uploaded_file(upload.name, raw)
 if not validation.is_valid:
     st.error(validation.message)
     st.stop()
 
-df = load_csv_bytes(raw_bytes)
-set_dataset(df, compute_file_hash(raw_bytes))
+df = load_csv_bytes(raw)
+set_dataset(df, compute_file_hash(raw))
 
-missing = int(df.isna().sum().sum())
-if missing > 0:
-    st.warning(f"Key Insight: Dataset has {missing} missing values.")
+missing_cells = int(df.isna().sum().sum())
+missing_cols = int((df.isna().sum() > 0).sum())
+file_mb = len(raw) / (1024 * 1024)
+render_stat_cards(
+    [
+        ("📏", "Rows", str(df.shape[0])),
+        ("🧱", "Columns", str(df.shape[1])),
+        ("⚠️", "Missing", str(missing_cells)),
+        ("💾", "Size (MB)", f"{file_mb:.2f}"),
+    ]
+)
+
+if missing_cols > 0:
+    st.warning(f"Missing values detected in {missing_cols} columns → Proceed to Data Cleaning.")
 else:
-    st.success("Key Insight: No missing values detected.")
+    st.success("No missing value warnings detected.")
 
-st.write(f"Shape: {df.shape[0]} rows × {df.shape[1]} columns")
-
-with st.expander("Dataset Preview", expanded=False):
+with st.expander("Dataset preview", expanded=False):
     st.dataframe(df.head(100), use_container_width=True)

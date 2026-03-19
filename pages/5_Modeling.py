@@ -6,6 +6,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import accuracy_score, r2_score
 from sklearn.model_selection import train_test_split
 
+from app.ui_components import render_insight_banners, render_page_header, render_sidebar
 from utils.helpers import infer_task_type
 from utils.session import initialize_state, reset_app
 
@@ -13,17 +14,16 @@ st.set_page_config(page_title="Modeling", layout="wide")
 initialize_state()
 
 with st.sidebar:
-    st.header("📂 Control Panel")
-    if st.button("Reset App"):
+    render_sidebar("model")
+    if st.button("Reset App", use_container_width=True):
         reset_app()
-        st.success("Application state cleared.")
+        st.success("Session reset complete.")
         st.stop()
 
-st.header("🤖 Modeling")
-st.caption("Automatic problem detection with model recommendation and training.")
+render_page_header("🤖", "Modeling", "Detect problem type automatically and train recommended baseline models.")
 
 if st.session_state.get("engineered_data") is None:
-    st.warning("No engineered data found. Complete Feature Engineering first.")
+    st.warning("No engineered dataset found. Complete Feature Engineering first.")
     st.stop()
 
 df = st.session_state["engineered_data"].dropna().copy()
@@ -36,13 +36,18 @@ X = pd.get_dummies(df.drop(columns=[target]), drop_first=False)
 y = df[target]
 problem = infer_task_type(y)
 
-st.info(f"Key Insight: Detected Problem Type: {problem.capitalize()}")
 if problem == "classification":
-    st.success("Recommended Model: Logistic Regression")
+    render_insight_banners([
+        "🧠 Detected Problem Type: Classification",
+        "Logistic Regression is suitable because target is categorical/low-cardinality.",
+    ])
 else:
-    st.success("Recommended Model: Linear Regression")
+    render_insight_banners([
+        "🧠 Detected Problem Type: Regression",
+        "Linear Regression is suitable because target appears continuous.",
+    ])
 
-if st.button("Train Model"):
+if st.button("Train model"):
     stratify = y if problem == "classification" and y.nunique(dropna=True) > 1 else None
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=stratify)
 
@@ -50,14 +55,14 @@ if st.button("Train Model"):
         model = LogisticRegression(max_iter=1000)
         model.fit(X_train, y_train)
         pred = model.predict(X_test)
-        score = float(accuracy_score(y_test, pred))
         metric = "accuracy"
+        score = float(accuracy_score(y_test, pred))
     else:
         model = LinearRegression()
         model.fit(X_train, y_train)
         pred = model.predict(X_test)
-        score = float(r2_score(y_test, pred))
         metric = "r2"
+        score = float(r2_score(y_test, pred))
 
     st.session_state["model_payload"] = {
         "problem": problem,
@@ -66,9 +71,8 @@ if st.button("Train Model"):
         "target": target,
         "rows_used": len(df),
     }
-    st.success("Model training completed.")
+    st.success("Training complete.")
 
-with st.expander("Model Details", expanded=False):
-    payload = st.session_state.get("model_payload")
-    if payload:
-        st.json(payload)
+with st.expander("Model details", expanded=False):
+    if st.session_state.get("model_payload"):
+        st.json(st.session_state["model_payload"])
