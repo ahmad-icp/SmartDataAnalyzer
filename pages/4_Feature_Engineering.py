@@ -1,5 +1,3 @@
-"""Feature engineering page."""
-
 from __future__ import annotations
 
 import streamlit as st
@@ -11,64 +9,48 @@ st.set_page_config(page_title="Feature Engineering", layout="wide")
 initialize_state()
 
 with st.sidebar:
-    st.header("Control Panel")
+    st.header("📂 Control Panel")
     if st.button("Reset App"):
         reset_app()
         st.success("Application state cleared.")
         st.stop()
-    st.progress(0.6)
-    st.caption("Step 4/6")
 
-st.header("4) Feature Engineering")
-st.subheader("Apply encoding and scaling with user controls")
-st.divider()
+st.header("⚙️ Feature Engineering")
+st.caption("Transform features for robust model training.")
 
 if st.session_state.get("cleaned_data") is None:
-    st.warning("Complete Data Cleaning first.")
+    st.warning("No cleaned data found. Complete Data Cleaning first.")
     st.stop()
 
 df = st.session_state["cleaned_data"].copy()
 
-corr_pairs = suggest_highly_correlated_features(df)
-with st.expander("Feature diagnostics", expanded=False):
-    st.write("Highly correlated feature pairs:", corr_pairs)
+if df.shape[1] > 50:
+    st.warning("Key Insight: High dimensionality detected. Consider feature selection.")
+else:
+    st.info("Key Insight: Feature count is manageable.")
 
-apply_ohe = st.checkbox("Apply One-Hot Encoding", value=True)
-apply_label = st.checkbox("Apply Label Encoding (factorize object columns)", value=False)
-scaler = st.selectbox("Scaling method", ["None", "StandardScaler", "MinMaxScaler"])
-
-def _apply_label_encoding(in_df):
-    out = in_df.copy()
-    for col in out.select_dtypes(include="object").columns:
-        out[col] = out[col].factorize()[0]
-    return out
-
-
-def _apply_minmax(in_df):
-    out = in_df.copy()
-    num_cols = out.select_dtypes(include="number").columns
-    for col in num_cols:
-        min_val = out[col].min()
-        max_val = out[col].max()
-        if max_val == min_val:
-            out[col] = 0.0
-        else:
-            out[col] = (out[col] - min_val) / (max_val - min_val)
-    return out
+apply_onehot = st.checkbox("Apply One-Hot Encoding", value=True)
+apply_label = st.checkbox("Apply Label Encoding", value=False)
+scaler = st.selectbox("Scaling", ["None", "StandardScaler", "MinMax"])
 
 if st.button("Apply Feature Engineering"):
-    engineered = df.copy()
-    if apply_ohe:
-        engineered = encode_features(engineered)
+    out = df.copy()
+    if apply_onehot:
+        out = encode_features(out)
     if apply_label:
-        engineered = _apply_label_encoding(engineered)
+        for c in out.select_dtypes(include="object").columns:
+            out[c] = out[c].factorize()[0]
     if scaler == "StandardScaler":
-        engineered = scale_numeric_features(engineered)
-    elif scaler == "MinMaxScaler":
-        engineered = _apply_minmax(engineered)
+        out = scale_numeric_features(out)
+    elif scaler == "MinMax":
+        num_cols = out.select_dtypes(include="number").columns
+        for c in num_cols:
+            cmin, cmax = out[c].min(), out[c].max()
+            out[c] = 0.0 if cmax == cmin else (out[c] - cmin) / (cmax - cmin)
 
-    st.session_state["engineered_data"] = engineered
-    st.success("Feature engineering complete.")
+    st.session_state["engineered_data"] = out
+    st.success("Feature engineering applied.")
 
-with st.expander("Engineered dataset preview", expanded=False):
-    st.dataframe(st.session_state.get("engineered_data", df).head(50), use_container_width=True)
+with st.expander("Feature Diagnostics", expanded=False):
+    st.write("High correlation pairs:", suggest_highly_correlated_features(df))
+    st.dataframe(st.session_state.get("engineered_data", df).head(100), use_container_width=True)

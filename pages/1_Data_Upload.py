@@ -1,5 +1,3 @@
-"""Data upload page."""
-
 from __future__ import annotations
 
 import streamlit as st
@@ -11,37 +9,36 @@ st.set_page_config(page_title="Data Upload", layout="wide")
 initialize_state()
 
 with st.sidebar:
-    st.header("Control Panel")
+    st.header("📂 Control Panel")
     if st.button("Reset App"):
         reset_app()
         st.success("Application state cleared.")
         st.stop()
-    st.progress(0.15)
-    st.caption("Step 1/6")
 
-st.header("1) Upload Data")
-st.subheader("Upload your CSV dataset")
-st.divider()
+st.header("📂 Data Upload")
+st.caption("Upload a CSV dataset to start the analysis pipeline.")
 
-uploaded = st.file_uploader("Upload dataset", type=["csv"])
+uploaded = st.file_uploader("Upload CSV", type=["csv"])
 if uploaded is None:
-    st.info("Please upload a CSV file to continue.")
+    st.info("Key Insight: Upload a file to unlock EDA and modeling pages.")
     st.stop()
 
-file_bytes = uploaded.getvalue()
-validation = validate_uploaded_file(uploaded.name, file_bytes)
+raw_bytes = uploaded.getvalue()
+validation = validate_uploaded_file(uploaded.name, raw_bytes)
 if not validation.is_valid:
     st.error(validation.message)
     st.stop()
 
-try:
-    df = load_csv_bytes(file_bytes)
-    set_dataset(df, compute_file_hash(file_bytes))
-    st.success("Dataset uploaded and stored in session state.")
-except Exception as exc:
-    st.error(f"Failed to load dataset: {exc}")
-    st.stop()
+df = load_csv_bytes(raw_bytes)
+set_dataset(df, compute_file_hash(raw_bytes))
 
-st.write(f"Rows: {len(df)} | Columns: {df.shape[1]}")
-with st.expander("Dataset preview", expanded=False):
-    st.dataframe(df.head(50), use_container_width=True)
+missing = int(df.isna().sum().sum())
+if missing > 0:
+    st.warning(f"Key Insight: Dataset has {missing} missing values.")
+else:
+    st.success("Key Insight: No missing values detected.")
+
+st.write(f"Shape: {df.shape[0]} rows × {df.shape[1]} columns")
+
+with st.expander("Dataset Preview", expanded=False):
+    st.dataframe(df.head(100), use_container_width=True)
