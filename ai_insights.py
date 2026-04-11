@@ -30,8 +30,15 @@ def _local_insights(df: pd.DataFrame) -> list:
     if not num.empty:
         zscores = np.abs(stats.zscore(num.fillna(num.mean())))
         if zscores.size:
-            count_out = (zscores > 3).sum()
-            out.append("Outlier counts (per column): " + ", ".join([f"{col}:{int(v)}" for col, v in zip(num.columns, count_out)]))
+            if zscores.ndim == 1:
+                count_out = int((zscores > 3).sum())
+                out.append(f"Outlier counts (per column): {num.columns[0]}:{count_out}")
+            else:
+                count_out = (zscores > 3).sum(axis=0)
+                out.append(
+                    "Outlier counts (per column): "
+                    + ", ".join([f"{col}:{int(v)}" for col, v in zip(num.columns, count_out)])
+                )
     return out
 
 

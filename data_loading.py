@@ -24,3 +24,10 @@ def to_excel_bytes(df: pd.DataFrame) -> bytes:
         df.to_excel(writer, index=False)
     buf.seek(0)
     return buf.getvalue()
+
+
+def to_parquet_bytes(df: pd.DataFrame) -> bytes:
+    buf = BytesIO()
+    df.to_parquet(buf, index=False)
+    buf.seek(0)
+    return buf.getvalue()
